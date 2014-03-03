@@ -27,7 +27,62 @@ object ZeroEncode extends App {
 		stdio.fprintf(fd, "%x \n", temp)
 
 	}
-	
+	//count kernel
+	val BufferFrames = new Kernel ("BufferFrames")
+  {
+    val pixelIn = input(UNSIGNED32)
+    val output1 = output(UNSIGNED32)
+    val output2 = output(UNSIGNED32)
+    val deliverOutput1 = local(UNSIGNED32,1)
+    val frameSize = local(UNSIGNED32,100)
+    val totalNumOfPixels = local(UNSIGNED32,1600) // 16 frames in image. 100 pixels each frame
+    val storeCounter = local(UNSIGNED32,0)
+    val base = local(UNSIGNED32,0)
+    val deliverMode = local(UNSIGNED32,0)
+    val ArrayType = Vector(UNSIGNED32,1600)
+    val frameArray = local(ArrayType)
+    
+    
+    // store the pixel in a vector
+    if(storeCounter <= totalNumOfPixels)
+    {
+      frameArray(storeCounter) = pixelIn
+      storeCounter = storeCounter + 1
+    }
+    // Read all pixels, switch to deliver mode
+    if(storeCounter == totalNumOfPixels)
+    {
+        deliverMode = 1
+        base = 0
+    }
+
+    if(deliverMode == 1) // deliver next pixel
+    {
+      for(f <- 0 until 100) // frames scale
+      {
+        if(deliverOutput1 == 1)
+        {
+          for(i <- 0 until frameSize) // frame size
+          {
+            output1 = frameArray(base + i)
+          }
+          deliverOutput1 = 0
+        }
+        else // send to output2
+        {
+          for(i <- 0 until frameSize) // frame size
+          {
+            output2 = frameArray(base + i)
+          }
+          deliverOutput1 = 1
+        }
+        base += frameSize
+        if(base == totalNumOfPixels)
+          base = 0
+      }
+    }
+  }
+  
 	//count kernel
 	val CountConsecutive = new Kernel ("CountConsecutive")
 	{
@@ -75,7 +130,8 @@ object ZeroEncode extends App {
   }
   
 	val dropSize = new Drop(SIGNED32)
-
+  val dropPixel = new Drop(UNSIGNED32)
+  
 	val app = new Application
 	{
 			
@@ -85,10 +141,14 @@ object ZeroEncode extends App {
     
 		dropSize(in(1))
 		dropSize(in(2))
-		val result = CountConsecutive(in(0))
-		WriteFile(result,'filename -> "compressed.txt")
+    val output = BufferFrames(in(0))
+		val result1 = CountConsecutive(output(0))
+    val result2 = CountConsecutive(output(1))
+		WriteFile(result1,'filename -> "compressed1.txt")
+    WriteFile(result2,'filename -> "compressed2.txt")
+   // WriteFile(output(2),'filename -> "count.txt")
 
 	}
-	app.emit("zero_encoding")
+	app.emit("zero_encoding2")
 }
 
